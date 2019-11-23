@@ -125,6 +125,7 @@ func New(orig pixel.Vec, atlas *Atlas) *Text {
 		atlas:      atlas,
 		mat:        pixel.IM,
 		col:        pixel.Alpha(1),
+		buf:        make([]byte, 0),
 	}
 
 	txt.glyph.SetLen(6)
