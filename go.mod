@@ -1,4 +1,4 @@
-module github.com/Tskken/pixel
+module github.com/faiface/pixel
 
 go 1.13
 
