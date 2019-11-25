@@ -3,7 +3,7 @@ package pixelgl
 import (
 	"github.com/faiface/mainthread"
 	"github.com/faiface/pixel"
-	"github.com/go-gl/glfw/v3.2/glfw"
+	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 // Pressed returns whether the Button is currently pressed down.
@@ -41,15 +41,12 @@ func (w *Window) MousePreviousPosition() pixel.Vec {
 // SetMousePosition positions the mouse cursor anywhere within the Window's Bounds.
 func (w *Window) SetMousePosition(v pixel.Vec) {
 	mainthread.Call(func() {
-		if (v.X >= 0 && v.X <= w.bounds.W()) &&
-			(v.Y >= 0 && v.Y <= w.bounds.H()) {
-			w.window.SetCursorPos(
-				v.X+w.bounds.Min.X,
-				(w.bounds.H()-v.Y)+w.bounds.Min.Y,
-			)
+		x, y := w.window.GetPos()
+		width, height := w.window.GetSize()
+		if (v.X >= 0 && v.X <= float64(width)) && (v.Y >= 0 && v.Y <= float64(height)) {
+			w.window.SetCursorPos(v.X+float64(x), ((float64(height) - v.Y) + float64(y)))
 			w.prevInp.mouse = v
 			w.currInp.mouse = v
-			w.tempInp.mouse = v
 		}
 	})
 }
@@ -360,9 +357,9 @@ func (w *Window) initInput() {
 		w.window.SetMouseButtonCallback(func(_ *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
 			switch action {
 			case glfw.Press:
-				w.tempInp.buttons[Button(button)] = true
+				w.currInp.buttons[Button(button)] = true
 			case glfw.Release:
-				w.tempInp.buttons[Button(button)] = false
+				w.currInp.buttons[Button(button)] = false
 			}
 		})
 
@@ -372,11 +369,11 @@ func (w *Window) initInput() {
 			}
 			switch action {
 			case glfw.Press:
-				w.tempInp.buttons[Button(key)] = true
+				w.currInp.buttons[Button(key)] = true
 			case glfw.Release:
-				w.tempInp.buttons[Button(key)] = false
+				w.currInp.buttons[Button(key)] = false
 			case glfw.Repeat:
-				w.tempInp.repeat[Button(key)] = true
+				w.currInp.repeat[Button(key)] = true
 			}
 		})
 
@@ -385,19 +382,21 @@ func (w *Window) initInput() {
 		})
 
 		w.window.SetCursorPosCallback(func(_ *glfw.Window, x, y float64) {
-			w.tempInp.mouse = pixel.V(
-				x+w.bounds.Min.X,
-				(w.bounds.H()-y)+w.bounds.Min.Y,
+			xpos, ypos := w.window.GetPos()
+			_, height := w.window.GetSize()
+			w.currInp.mouse = pixel.V(
+				x+float64(xpos),
+				(float64(height)-y)+float64(ypos),
 			)
 		})
 
 		w.window.SetScrollCallback(func(_ *glfw.Window, xoff, yoff float64) {
-			w.tempInp.scroll.X += xoff
-			w.tempInp.scroll.Y += yoff
+			w.currInp.scroll.X += xoff
+			w.currInp.scroll.Y += yoff
 		})
 
 		w.window.SetCharCallback(func(_ *glfw.Window, r rune) {
-			w.tempInp.typed += string(r)
+			w.currInp.typed += string(r)
 		})
 	})
 }
@@ -405,16 +404,19 @@ func (w *Window) initInput() {
 // UpdateInput polls window events. Call this function to poll window events
 // without swapping buffers. Note that the Update method invokes UpdateInput.
 func (w *Window) UpdateInput() {
+	w.prevInp = w.currInp
+
 	mainthread.Call(func() {
 		glfw.PollEvents()
 	})
 
-	w.prevInp = w.currInp
-	w.currInp = w.tempInp
-
-	w.tempInp.repeat = [KeyLast + 1]bool{}
-	w.tempInp.scroll = pixel.ZV
-	w.tempInp.typed = ""
-
 	w.updateJoystickInput()
+}
+
+type inputState struct {
+	mouse   pixel.Vec
+	buttons [KeyLast + 1]bool
+	repeat  [KeyLast + 1]bool
+	scroll  pixel.Vec
+	typed   string
 }

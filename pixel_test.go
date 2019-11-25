@@ -8,8 +8,8 @@ import (
 
 	_ "image/png"
 
-	"github.com/faiface/pixel"
-	"github.com/faiface/pixel/pixelgl"
+	"github.com/Tskken/pixel"
+	"github.com/Tskken/pixel/pixelgl"
 )
 
 var (
@@ -53,12 +53,12 @@ func TestSprite_Draw(t *testing.T) {
 
 	sprite := pixel.NewSprite(pic, pic.Bounds())
 
-	cfg := pixelgl.WindowConfig{
-		Title:  "testing",
-		Bounds: pixel.R(0, 0, 150, 150),
-	}
+	// cfg := pixelgl.WindowConfig{
+	// 	Title:  "testing",
+	// 	Bounds: pixel.R(0, 0, 150, 150),
+	// }
 
-	win, err := pixelgl.NewWindow(cfg)
+	win, err := pixelgl.NewWindow(150, 150)
 	if err != nil {
 		t.Fatalf("Could not create window: %v", err)
 	}

@@ -1,7 +1,7 @@
 package pixelgl
 
 import (
-	"github.com/go-gl/glfw/v3.2/glfw"
+	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
 // Joystick is a joystick or controller.
@@ -33,7 +33,7 @@ const (
 //
 // This API is experimental.
 func (w *Window) JoystickPresent(js Joystick) bool {
-	return w.currJoy.connected[js]
+	return w.currJoy[js].connected
 }
 
 // JoystickName returns the name of the joystick. A disconnected joystick will return an
@@ -41,21 +41,21 @@ func (w *Window) JoystickPresent(js Joystick) bool {
 //
 // This API is experimental.
 func (w *Window) JoystickName(js Joystick) string {
-	return w.currJoy.name[js]
+	return w.currJoy[js].name
 }
 
 // JoystickButtonCount returns the number of buttons a connected joystick has.
 //
 // This API is experimental.
 func (w *Window) JoystickButtonCount(js Joystick) int {
-	return len(w.currJoy.buttons[js])
+	return len(w.currJoy[js].buttons)
 }
 
 // JoystickAxisCount returns the number of axes a connected joystick has.
 //
 // This API is experimental.
 func (w *Window) JoystickAxisCount(js Joystick) int {
-	return len(w.currJoy.axis[js])
+	return len(w.currJoy[js].axes)
 }
 
 // JoystickPressed returns whether the joystick Button is currently pressed down.
@@ -63,7 +63,12 @@ func (w *Window) JoystickAxisCount(js Joystick) int {
 //
 // This API is experimental.
 func (w *Window) JoystickPressed(js Joystick, button int) bool {
-	return w.currJoy.getButton(js, button)
+	// Check that the joystick and button is valid, return false by default
+	if w.currJoy[js].buttons == nil || button >= len(w.currJoy[js].buttons) || button < 0 {
+		return false
+	}
+
+	return w.currJoy[js].buttons[button] == glfw.Repeat
 }
 
 // JoystickJustPressed returns whether the joystick Button has just been pressed down.
@@ -71,7 +76,11 @@ func (w *Window) JoystickPressed(js Joystick, button int) bool {
 //
 // This API is experimental.
 func (w *Window) JoystickJustPressed(js Joystick, button int) bool {
-	return w.currJoy.getButton(js, button) && !w.prevJoy.getButton(js, button)
+	// Check that the joystick and button is valid, return false by default
+	if w.currJoy[js].buttons == nil || button >= len(w.currJoy[js].buttons) || button < 0 {
+		return false
+	}
+	return w.currJoy[js].buttons[button] == glfw.Press
 }
 
 // JoystickJustReleased returns whether the joystick Button has just been released up.
@@ -79,67 +88,50 @@ func (w *Window) JoystickJustPressed(js Joystick, button int) bool {
 //
 // This API is experimental.
 func (w *Window) JoystickJustReleased(js Joystick, button int) bool {
-	return !w.currJoy.getButton(js, button) && w.prevJoy.getButton(js, button)
+	return w.currJoy[js].buttons[button] == glfw.Release
 }
 
 // JoystickAxis returns the value of a joystick axis at the last call to Window.Update.
 // If the axis index is out of range, this will return 0.
 //
 // This API is experimental.
-func (w *Window) JoystickAxis(js Joystick, axis int) float64 {
-	return w.currJoy.getAxis(js, axis)
+func (w *Window) JoystickAxes(js Joystick, axes int) float64 {
+	// Check that the joystick and axis is valid, return 0 by default.
+	if w.currJoy[js].axes == nil || axes >= len(w.currJoy[js].axes) || axes < 0 {
+		return 0
+	}
+	return float64(w.currJoy[js].axes[axes])
 }
 
 // Used internally during Window.UpdateInput to update the state of the joysticks.
 func (w *Window) updateJoystickInput() {
 	for js := Joystick1; js <= JoystickLast; js++ {
-		// Determine and store if the joystick was connected
-		joystickPresent := glfw.JoystickPresent(glfw.Joystick(js))
-		w.tempJoy.connected[js] = joystickPresent
-
-		if joystickPresent {
-			w.tempJoy.buttons[js] = glfw.GetJoystickButtons(glfw.Joystick(js))
-			w.tempJoy.axis[js] = glfw.GetJoystickAxes(glfw.Joystick(js))
-
-			if !w.currJoy.connected[js] {
-				// The joystick was recently connected, we get the name
-				w.tempJoy.name[js] = glfw.GetJoystickName(glfw.Joystick(js))
-			} else {
-				// Use the name from the previous one
-				w.tempJoy.name[js] = w.currJoy.name[js]
+		if glfw.Joystick(js).IsGamepad() {
+			if !w.currJoy[js].connected {
+				w.currJoy[js].connected = true
+				w.currJoy[js].name = glfw.Joystick(js).GetName()
 			}
+
+			w.currJoy[js].buttons = glfw.Joystick(js).GetButtons()
+			w.currJoy[js].axes = glfw.Joystick(js).GetAxes()
 		} else {
-			w.tempJoy.buttons[js] = []byte{}
-			w.tempJoy.axis[js] = []float32{}
-			w.tempJoy.name[js] = ""
+			if w.currJoy[js].connected {
+				w.currJoy[js].buttons = nil
+				w.currJoy[js].axes = nil
+
+				w.currJoy[js].name = ""
+
+				w.currJoy[js].connected = false
+			}
 		}
 	}
-
-	w.prevJoy = w.currJoy
-	w.currJoy = w.tempJoy
 }
+
+// var joycon[JoystickLast + 1]joystickState
 
 type joystickState struct {
-	connected [JoystickLast + 1]bool
-	name      [JoystickLast + 1]string
-	buttons   [JoystickLast + 1][]byte
-	axis      [JoystickLast + 1][]float32
-}
-
-// Returns if a button on a joystick is down, returning false if the button or joystick is invalid.
-func (js *joystickState) getButton(joystick Joystick, button int) bool {
-	// Check that the joystick and button is valid, return false by default
-	if js.buttons[joystick] == nil || button >= len(js.buttons[joystick]) || button < 0 {
-		return false
-	}
-	return js.buttons[joystick][byte(button)] == 1
-}
-
-// Returns the value of a joystick axis, returning 0 if the button or joystick is invalid.
-func (js *joystickState) getAxis(joystick Joystick, axis int) float64 {
-	// Check that the joystick and axis is valid, return 0 by default.
-	if js.axis[joystick] == nil || axis >= len(js.axis[joystick]) || axis < 0 {
-		return 0
-	}
-	return float64(js.axis[joystick][axis])
+	connected bool
+	name      string
+	buttons   []glfw.Action
+	axes      []float32
 }
