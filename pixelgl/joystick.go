@@ -5,35 +5,35 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
-// Joystick is a joystick or controller.
-type Joystick int
+// // Joystick is a joystick or controller.
+// type Joystick int
 
 // List all of the joysticks.
 const (
-	Joystick1  = Joystick(glfw.Joystick1)
-	Joystick2  = Joystick(glfw.Joystick2)
-	Joystick3  = Joystick(glfw.Joystick3)
-	Joystick4  = Joystick(glfw.Joystick4)
-	Joystick5  = Joystick(glfw.Joystick5)
-	Joystick6  = Joystick(glfw.Joystick6)
-	Joystick7  = Joystick(glfw.Joystick7)
-	Joystick8  = Joystick(glfw.Joystick8)
-	Joystick9  = Joystick(glfw.Joystick9)
-	Joystick10 = Joystick(glfw.Joystick10)
-	Joystick11 = Joystick(glfw.Joystick11)
-	Joystick12 = Joystick(glfw.Joystick12)
-	Joystick13 = Joystick(glfw.Joystick13)
-	Joystick14 = Joystick(glfw.Joystick14)
-	Joystick15 = Joystick(glfw.Joystick15)
-	Joystick16 = Joystick(glfw.Joystick16)
+	Joystick1  = glfw.Joystick1
+	Joystick2  = glfw.Joystick2
+	Joystick3  = glfw.Joystick3
+	Joystick4  = glfw.Joystick4
+	Joystick5  = glfw.Joystick5
+	Joystick6  = glfw.Joystick6
+	Joystick7  = glfw.Joystick7
+	Joystick8  = glfw.Joystick8
+	Joystick9  = glfw.Joystick9
+	Joystick10 = glfw.Joystick10
+	Joystick11 = glfw.Joystick11
+	Joystick12 = glfw.Joystick12
+	Joystick13 = glfw.Joystick13
+	Joystick14 = glfw.Joystick14
+	Joystick15 = glfw.Joystick15
+	Joystick16 = glfw.Joystick16
 
-	JoystickLast = Joystick(glfw.JoystickLast)
+	JoystickLast = glfw.JoystickLast
 )
 
 // JoystickPresent returns if the joystick is currently connected.
 //
 // This API is experimental.
-func (w *Window) JoystickPresent(js Joystick) bool {
+func (w *Window) JoystickPresent(js glfw.Joystick) bool {
 	return w.currJoy[js].connected
 }
 
@@ -41,21 +41,21 @@ func (w *Window) JoystickPresent(js Joystick) bool {
 // empty string.
 //
 // This API is experimental.
-func (w *Window) JoystickName(js Joystick) string {
+func (w *Window) JoystickName(js glfw.Joystick) string {
 	return w.currJoy[js].name
 }
 
 // JoystickButtonCount returns the number of buttons a connected joystick has.
 //
 // This API is experimental.
-func (w *Window) JoystickButtonCount(js Joystick) int {
+func (w *Window) JoystickButtonCount(js glfw.Joystick) int {
 	return len(w.currJoy[js].buttons)
 }
 
 // JoystickAxisCount returns the number of axes a connected joystick has.
 //
 // This API is experimental.
-func (w *Window) JoystickAxisCount(js Joystick) int {
+func (w *Window) JoystickAxisCount(js glfw.Joystick) int {
 	return len(w.currJoy[js].axes)
 }
 
@@ -63,7 +63,7 @@ func (w *Window) JoystickAxisCount(js Joystick) int {
 // If the button index is out of range, this will return false.
 //
 // This API is experimental.
-func (w *Window) JoystickPressed(js Joystick, button int) bool {
+func (w *Window) JoystickPressed(js glfw.Joystick, button int) bool {
 	return w.currJoy[js].getButton(button)
 }
 
@@ -71,7 +71,7 @@ func (w *Window) JoystickPressed(js Joystick, button int) bool {
 // If the button index is out of range, this will return false.
 //
 // This API is experimental.
-func (w *Window) JoystickJustPressed(js Joystick, button int) bool {
+func (w *Window) JoystickJustPressed(js glfw.Joystick, button int) bool {
 	return w.currJoy[js].getButton(button) && !w.prevJoy[js].getButton(button)
 }
 
@@ -79,7 +79,7 @@ func (w *Window) JoystickJustPressed(js Joystick, button int) bool {
 // If the button index is out of range, this will return false.
 //
 // This API is experimental.
-func (w *Window) JoystickJustReleased(js Joystick, button int) bool {
+func (w *Window) JoystickJustReleased(js glfw.Joystick, button int) bool {
 	return !w.currJoy[js].getButton(button) && w.prevJoy[js].getButton(button)
 }
 
@@ -87,7 +87,7 @@ func (w *Window) JoystickJustReleased(js Joystick, button int) bool {
 // If the axis index is out of range, this will return 0.
 //
 // This API is experimental.
-func (w *Window) JoystickAxis(js Joystick, axis int) float64 {
+func (w *Window) JoystickAxis(js glfw.Joystick, axis int) float64 {
 	return w.currJoy[js].getAxis(axis)
 }
 
@@ -99,11 +99,11 @@ func (w *Window) updateJoystickInput() {
 			if glfw.Joystick(js).IsGamepad() {
 				if !w.currJoy[js].connected {
 					w.currJoy[js].connected = true
-					w.currJoy[js].name = glfw.Joystick(js).GetName()
+					w.currJoy[js].name = js.GetName()
 				}
 
-				w.currJoy[js].buttons = glfw.Joystick(js).GetButtons()
-				w.currJoy[js].axes = glfw.Joystick(js).GetAxes()
+				w.currJoy[js].buttons = js.GetButtons()
+				w.currJoy[js].axes = js.GetAxes()
 			} else {
 				if w.currJoy[js].connected {
 					w.currJoy[js] = joystickState{}
