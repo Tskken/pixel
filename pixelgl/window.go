@@ -8,7 +8,7 @@ import (
 	"github.com/faiface/glhf"
 	"github.com/faiface/mainthread"
 	"github.com/faiface/pixel"
-	"github.com/go-gl/glfw/v3.2/glfw"
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/pkg/errors"
 )
 
@@ -76,15 +76,9 @@ type Window struct {
 		xpos, ypos, width, height int
 	}
 
-	prevInp, currInp, tempInp struct {
-		mouse   pixel.Vec
-		buttons [KeyLast + 1]bool
-		repeat  [KeyLast + 1]bool
-		scroll  pixel.Vec
-		typed   string
-	}
+	prevInp, currInp, tempInp inputState
 
-	prevJoy, currJoy, tempJoy joystickState
+	prevJoy, currJoy [JoystickLast + 1]joystickState
 }
 
 var currWin *Window
