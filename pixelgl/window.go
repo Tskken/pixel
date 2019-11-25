@@ -8,64 +8,18 @@ import (
 	"github.com/faiface/glhf"
 	"github.com/faiface/mainthread"
 	"github.com/faiface/pixel"
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/go-gl/glfw/v3.2/glfw"
 	"github.com/pkg/errors"
 )
 
-// // WindowConfig is a structure for specifying all possible properties of a Window. Properties are
-// // chosen in such a way, that you usually only need to set a few of them - defaults (zeros) should
-// // usually be sensible.
-// //
-// // Note that you always need to set the Bounds of a Window.
-// type WindowConfig struct {
-// 	// Title at the top of the Window.
-// 	Title string
-
-// 	// Icon specifies the icon images available to be used by the window. This is usually
-// 	// displayed in the top bar of the window or in the task bar of the desktop environment.
-// 	//
-// 	// If passed one image, it will use that image, if passed an array of images those of or
-// 	// closest to the sizes desired by the system are selected. The desired image sizes varies
-// 	// depending on platform and system settings. The selected images will be rescaled as
-// 	// needed. Good sizes include 16x16, 32x32 and 48x48.
-// 	//
-// 	// Note: Setting this value doesn't have an effect on OSX. You'll need to set the icon when
-// 	// bundling your application for release.
-// 	Icon []pixel.Picture
-
-// 	// Bounds specify the bounds of the Window in pixels.
-// 	Bounds pixel.Rect
-
-// 	// If set to nil, the Window will be windowed. Otherwise it will be fullscreen on the
-// 	// specified Monitor.
-// 	Monitor *Monitor
-
-// 	// Whether the Window is resizable.
-// 	Resizable bool
-
-// 	// Undecorated Window ommits the borders and decorations (close button, etc.).
-// 	Undecorated bool
-
-// 	// NoIconify specifies whether fullscreen windows should not automatically
-// 	// iconify (and restore the previous video mode) on focus loss.
-// 	NoIconify bool
-
-// 	// AlwaysOnTop specifies whether the windowed mode window will be floating
-// 	// above other regular windows, also called topmost or always-on-top.
-// 	// This is intended primarily for debugging purposes and cannot be used to
-// 	// implement proper full screen windows.
-// 	AlwaysOnTop bool
-
-// 	// VSync (vertical synchronization) synchronizes Window's framerate with the framerate of
-// 	// the monitor.
-// 	VSync bool
-// }
-
-type Option func(*options)
-
-type options struct {
+// WindowConfig is a structure for specifying all possible properties of a Window. Properties are
+// chosen in such a way, that you usually only need to set a few of them - defaults (zeros) should
+// usually be sensible.
+//
+// Note that you always need to set the Bounds of a Window.
+type WindowConfig struct {
 	// Title at the top of the Window.
-	title string
+	Title string
 
 	// Icon specifies the icon images available to be used by the window. This is usually
 	// displayed in the top bar of the window or in the task bar of the desktop environment.
@@ -77,46 +31,41 @@ type options struct {
 	//
 	// Note: Setting this value doesn't have an effect on OSX. You'll need to set the icon when
 	// bundling your application for release.
-	icon []pixel.Picture
+	Icon []pixel.Picture
+
+	// Bounds specify the bounds of the Window in pixels.
+	Bounds pixel.Rect
 
 	// If set to nil, the Window will be windowed. Otherwise it will be fullscreen on the
 	// specified Monitor.
-	monitor *Monitor
+	Monitor *Monitor
 
 	// Whether the Window is resizable.
-	resizable int
+	Resizable bool
 
-	decorated int
+	// Undecorated Window ommits the borders and decorations (close button, etc.).
+	Undecorated bool
 
 	// NoIconify specifies whether fullscreen windows should not automatically
 	// iconify (and restore the previous video mode) on focus loss.
-	noIconify int
+	NoIconify bool
 
 	// AlwaysOnTop specifies whether the windowed mode window will be floating
 	// above other regular windows, also called topmost or always-on-top.
 	// This is intended primarily for debugging purposes and cannot be used to
 	// implement proper full screen windows.
-	alwaysOnTop int
+	AlwaysOnTop bool
 
 	// VSync (vertical synchronization) synchronizes Window's framerate with the framerate of
 	// the monitor.
-	vsync bool
-}
-
-var defaultOptions = options{
-	title:       "",
-	icon:        nil,
-	monitor:     nil,
-	resizable:   glfw.False,
-	decorated:   glfw.True,
-	noIconify:   glfw.False,
-	alwaysOnTop: glfw.False,
-	vsync:       false,
+	VSync bool
 }
 
 // Window is a window handler. Use this type to manipulate a window (input, drawing, etc.).
 type Window struct {
-	window             *glfw.Window
+	window *glfw.Window
+
+	bounds             pixel.Rect
 	canvas             *Canvas
 	vsync              bool
 	cursorVisible      bool
@@ -127,9 +76,15 @@ type Window struct {
 		xpos, ypos, width, height int
 	}
 
-	prevInp, currInp inputState
+	prevInp, currInp, tempInp struct {
+		mouse   pixel.Vec
+		buttons [KeyLast + 1]bool
+		repeat  [KeyLast + 1]bool
+		scroll  pixel.Vec
+		typed   string
+	}
 
-	prevJoy, currJoy [JoystickLast + 1]joystickState
+	prevJoy, currJoy, tempJoy joystickState
 }
 
 var currWin *Window
@@ -137,73 +92,76 @@ var currWin *Window
 // NewWindow creates a new Window with it's properties specified in the provided config.
 //
 // If Window creation fails, an error is returned (e.g. due to unavailable graphics device).
-func NewWindow(width, height int, ops ...Option) (win *Window, err error) {
-	o := defaultOptions
-
-	for _, fnc := range ops {
-		fnc(&o)
+func NewWindow(cfg WindowConfig) (*Window, error) {
+	bool2int := map[bool]int{
+		true:  glfw.True,
+		false: glfw.False,
 	}
 
-	mainthread.Call(func() {
+	w := &Window{bounds: cfg.Bounds, cursorVisible: true}
+
+	err := mainthread.CallErr(func() error {
+		var err error
+
 		glfw.WindowHint(glfw.ContextVersionMajor, 3)
 		glfw.WindowHint(glfw.ContextVersionMinor, 3)
 		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 		glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
-		glfw.WindowHint(glfw.Resizable, o.resizable)
-		glfw.WindowHint(glfw.Decorated, o.decorated)
-		glfw.WindowHint(glfw.Floating, o.alwaysOnTop)
-		glfw.WindowHint(glfw.AutoIconify, o.noIconify)
+		glfw.WindowHint(glfw.Resizable, bool2int[cfg.Resizable])
+		glfw.WindowHint(glfw.Decorated, bool2int[!cfg.Undecorated])
+		glfw.WindowHint(glfw.Floating, bool2int[cfg.AlwaysOnTop])
+		glfw.WindowHint(glfw.AutoIconify, bool2int[!cfg.NoIconify])
 
 		var share *glfw.Window
 		if currWin != nil {
 			share = currWin.window
 		}
-
-		win = &Window{}
-
-		win.window, err = glfw.CreateWindow(
+		_, _, width, height := intBounds(cfg.Bounds)
+		w.window, err = glfw.CreateWindow(
 			width,
 			height,
-			o.title,
+			cfg.Title,
 			nil,
 			share,
 		)
 		if err != nil {
-			return
+			return err
 		}
 
 		// enter the OpenGL context
-		win.begin()
+		w.begin()
 		glhf.Init()
-		win.end()
+		w.end()
+
+		return nil
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "creating window failed")
 	}
 
-	if len(o.icon) > 0 {
-		imgs := make([]image.Image, len(o.icon))
-		for i, icon := range o.icon {
+	if len(cfg.Icon) > 0 {
+		imgs := make([]image.Image, len(cfg.Icon))
+		for i, icon := range cfg.Icon {
 			pic := pixel.PictureDataFromPicture(icon)
 			imgs[i] = pic.Image()
 		}
 		mainthread.Call(func() {
-			win.window.SetIcon(imgs)
+			w.window.SetIcon(imgs)
 		})
 	}
 
-	win.SetVSync(o.vsync)
+	w.SetVSync(cfg.VSync)
 
-	win.initInput()
-	win.SetMonitor(o.monitor)
+	w.initInput()
+	w.SetMonitor(cfg.Monitor)
 
-	win.canvas = NewCanvas(pixel.R(0, 0, float64(width), float64(height)))
-	win.Update()
+	w.canvas = NewCanvas(cfg.Bounds)
+	w.Update()
 
-	runtime.SetFinalizer(win, (*Window).Destroy)
+	runtime.SetFinalizer(w, (*Window).Destroy)
 
-	return win, nil
+	return w, nil
 }
 
 // Destroy destroys the Window. The Window can't be used any further.
@@ -215,8 +173,16 @@ func (w *Window) Destroy() {
 
 // Update swaps buffers and polls events. Call this method at the end of each frame.
 func (w *Window) Update() {
-	width, height := w.window.GetSize()
-	w.canvas.SetBounds(pixel.R(0, 0, float64(width), float64(height)))
+	mainthread.Call(func() {
+		_, _, oldW, oldH := intBounds(w.bounds)
+		newW, newH := w.window.GetSize()
+		w.bounds = w.bounds.ResizedMin(w.bounds.Size().Add(pixel.V(
+			float64(newW-oldW),
+			float64(newH-oldH),
+		)))
+	})
+
+	w.canvas.SetBounds(w.bounds)
 
 	mainthread.Call(func() {
 		w.begin()
@@ -250,14 +216,20 @@ func (w *Window) Update() {
 // This is useful when overriding the user's attempt to close the Window, or just to close the
 // Window from within the program.
 func (w *Window) SetClosed(closed bool) {
-	w.window.SetShouldClose(closed)
+	mainthread.Call(func() {
+		w.window.SetShouldClose(closed)
+	})
 }
 
 // Closed returns the closed flag of the Window, which reports whether the Window should be closed.
 //
 // The closed flag is automatically set when a user attempts to close the Window.
 func (w *Window) Closed() bool {
-	return w.window.ShouldClose()
+	var closed bool
+	mainthread.Call(func() {
+		closed = w.window.ShouldClose()
+	})
+	return closed
 }
 
 // SetTitle changes the title of the Window.
@@ -267,9 +239,12 @@ func (w *Window) SetTitle(title string) {
 	})
 }
 
-// SetSize sets the width and height of the window
-func (w *Window) SetSize(width, height int) {
+// SetBounds sets the bounds of the Window in pixels. Bounds can be fractional, but the actual size
+// of the window will be rounded to integers.
+func (w *Window) SetBounds(bounds pixel.Rect) {
+	w.bounds = bounds
 	mainthread.Call(func() {
+		_, _, width, height := intBounds(bounds)
 		w.window.SetSize(width, height)
 	})
 }
@@ -281,48 +256,56 @@ func (w *Window) SetSize(width, height int) {
 // If it is a full screen window, this function does nothing.
 func (w *Window) SetPos(pos pixel.Vec) {
 	mainthread.Call(func() {
-		w.window.SetPos(int(pos.X), int(pos.Y))
+		left, top := int(pos.X), int(pos.Y)
+		w.window.SetPos(left, top)
 	})
 }
 
 // GetPos gets the position, in screen coordinates, of the upper-left corner
 // of the client area of the window. The position is rounded to integers.
 func (w *Window) GetPos() pixel.Vec {
-	x, y := w.window.GetPos()
-	return pixel.V(float64(x), float64(y))
+	var v pixel.Vec
+	mainthread.Call(func() {
+		x, y := w.window.GetPos()
+		v = pixel.V(float64(x), float64(y))
+	})
+	return v
 }
 
 // Bounds returns the current bounds of the Window.
 func (w *Window) Bounds() pixel.Rect {
-	width, height := w.window.GetSize()
-	return pixel.R(0, 0, float64(width), float64(height))
+	return w.bounds
 }
 
 func (w *Window) setFullscreen(monitor *Monitor) {
-	w.restore.xpos, w.restore.ypos = w.window.GetPos()
-	w.restore.width, w.restore.height = w.window.GetSize()
+	mainthread.Call(func() {
+		w.restore.xpos, w.restore.ypos = w.window.GetPos()
+		w.restore.width, w.restore.height = w.window.GetSize()
 
-	mode := monitor.monitor.GetVideoMode()
+		mode := monitor.monitor.GetVideoMode()
 
-	w.window.SetMonitor(
-		monitor.monitor,
-		0,
-		0,
-		mode.Width,
-		mode.Height,
-		mode.RefreshRate,
-	)
+		w.window.SetMonitor(
+			monitor.monitor,
+			0,
+			0,
+			mode.Width,
+			mode.Height,
+			mode.RefreshRate,
+		)
+	})
 }
 
 func (w *Window) setWindowed() {
-	w.window.SetMonitor(
-		nil,
-		w.restore.xpos,
-		w.restore.ypos,
-		w.restore.width,
-		w.restore.height,
-		0,
-	)
+	mainthread.Call(func() {
+		w.window.SetMonitor(
+			nil,
+			w.restore.xpos,
+			w.restore.ypos,
+			w.restore.width,
+			w.restore.height,
+			0,
+		)
+	})
 }
 
 // SetMonitor sets the Window fullscreen on the given Monitor. If the Monitor is nil, the Window
@@ -343,17 +326,25 @@ func (w *Window) SetMonitor(monitor *Monitor) {
 // Monitor returns a monitor the Window is fullscreen on. If the Window is not fullscreen, this
 // function returns nil.
 func (w *Window) Monitor() *Monitor {
-	if monitor := w.window.GetMonitor(); monitor != nil {
-		return &Monitor{
-			monitor: monitor,
-		}
+	var monitor *glfw.Monitor
+	mainthread.Call(func() {
+		monitor = w.window.GetMonitor()
+	})
+	if monitor == nil {
+		return nil
 	}
-	return nil
+	return &Monitor{
+		monitor: monitor,
+	}
 }
 
 // Focused returns true if the Window has input focus.
 func (w *Window) Focused() bool {
-	return w.window.GetAttrib(glfw.Focused) == glfw.True
+	var focused bool
+	mainthread.Call(func() {
+		focused = w.window.GetAttrib(glfw.Focused) == glfw.True
+	})
+	return focused
 }
 
 // SetVSync sets whether the Window's Update should synchronize with the monitor refresh rate.
@@ -369,11 +360,13 @@ func (w *Window) VSync() bool {
 // SetCursorVisible sets the visibility of the mouse cursor inside the Window client area.
 func (w *Window) SetCursorVisible(visible bool) {
 	w.cursorVisible = visible
-	if visible {
-		w.window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
-	} else {
-		w.window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
-	}
+	mainthread.Call(func() {
+		if visible {
+			w.window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+		} else {
+			w.window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
+		}
+	})
 }
 
 // CursorVisible returns the visibility status of the mouse cursor.
@@ -381,6 +374,7 @@ func (w *Window) CursorVisible() bool {
 	return w.cursorVisible
 }
 
+// Note: must be called inside the main thread.
 func (w *Window) begin() {
 	if currWin != w {
 		w.window.MakeContextCurrent()
@@ -388,8 +382,9 @@ func (w *Window) begin() {
 	}
 }
 
+// Note: must be called inside the main thread.
 func (w *Window) end() {
-	glfw.DetachCurrentContext()
+	// nothing, really
 }
 
 // MakeTriangles generates a specialized copy of the supplied Triangles that will draw onto this
