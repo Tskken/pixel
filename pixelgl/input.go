@@ -49,7 +49,6 @@ func (w *Window) SetMousePosition(v pixel.Vec) {
 			)
 			w.prevInp.mouse = v
 			w.currInp.mouse = v
-			w.tempInp.mouse = v
 		}
 	})
 }
@@ -216,9 +215,9 @@ func (w *Window) initInput() {
 		w.window.SetMouseButtonCallback(func(_ *glfw.Window, button glfw.MouseButton, action glfw.Action, mod glfw.ModifierKey) {
 			switch action {
 			case glfw.Press:
-				w.tempInp.buttons[button] = true
+				w.currInp.buttons[button] = true
 			case glfw.Release:
-				w.tempInp.buttons[button] = false
+				w.currInp.buttons[button] = false
 			}
 		})
 
@@ -228,11 +227,11 @@ func (w *Window) initInput() {
 			}
 			switch action {
 			case glfw.Press:
-				w.tempInp.buttons[key] = true
+				w.currInp.buttons[key] = true
 			case glfw.Release:
-				w.tempInp.buttons[key] = false
+				w.currInp.buttons[key] = false
 			case glfw.Repeat:
-				w.tempInp.repeat[key] = true
+				w.currInp.repeat[key] = true
 			}
 		})
 
@@ -241,19 +240,19 @@ func (w *Window) initInput() {
 		})
 
 		w.window.SetCursorPosCallback(func(_ *glfw.Window, x, y float64) {
-			w.tempInp.mouse = pixel.V(
+			w.currInp.mouse = pixel.V(
 				x+w.bounds.Min.X,
 				(w.bounds.H()-y)+w.bounds.Min.Y,
 			)
 		})
 
 		w.window.SetScrollCallback(func(_ *glfw.Window, xoff, yoff float64) {
-			w.tempInp.scroll.X += xoff
-			w.tempInp.scroll.Y += yoff
+			w.currInp.scroll.X += xoff
+			w.currInp.scroll.Y += yoff
 		})
 
 		w.window.SetCharCallback(func(_ *glfw.Window, r rune) {
-			w.tempInp.typed += string(r)
+			w.currInp.typed += string(r)
 		})
 	})
 }
@@ -261,17 +260,10 @@ func (w *Window) initInput() {
 // UpdateInput polls window events. Call this function to poll window events
 // without swapping buffers. Note that the Update method invokes UpdateInput.
 func (w *Window) UpdateInput() {
+	w.prevInp = w.currInp
 	mainthread.Call(func() {
 		glfw.PollEvents()
 	})
-
-	w.prevInp = w.currInp
-	w.currInp = w.tempInp
-
-	w.tempInp.repeat = [KeyLast + 1]bool{}
-	w.tempInp.scroll = pixel.ZV
-	w.tempInp.typed = ""
-
 	w.updateJoystickInput()
 }
 

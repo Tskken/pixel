@@ -12,53 +12,131 @@ import (
 	"github.com/pkg/errors"
 )
 
-// WindowConfig is a structure for specifying all possible properties of a Window. Properties are
-// chosen in such a way, that you usually only need to set a few of them - defaults (zeros) should
-// usually be sensible.
+// Option is the type for option functions given to NewWindow() for configuring the window settings on startup.
+type Option func(*options)
+
+type options struct {
+	title       string
+	icon        []pixel.Picture
+	monitor     *Monitor
+	resizable   int
+	decorated   int
+	noIconify   int
+	alwaysOnTop bool
+	vsync       bool
+
+	transparentFramebuffer int
+}
+
+var defaultOptions = options{
+	resizable:              glfw.False,
+	decorated:              glfw.True,
+	noIconify:              glfw.False,
+	transparentFramebuffer: glfw.False,
+}
+
+// SetTitle is an option function for NewWindow which sets the windows Title.
 //
-// Note that you always need to set the Bounds of a Window.
-type WindowConfig struct {
-	// Title at the top of the Window.
-	Title string
+// Default is an empty string.
+func SetTitle(title string) Option {
+	return func(o *options) {
+		o.title = title
+	}
+}
 
-	// Icon specifies the icon images available to be used by the window. This is usually
-	// displayed in the top bar of the window or in the task bar of the desktop environment.
-	//
-	// If passed one image, it will use that image, if passed an array of images those of or
-	// closest to the sizes desired by the system are selected. The desired image sizes varies
-	// depending on platform and system settings. The selected images will be rescaled as
-	// needed. Good sizes include 16x16, 32x32 and 48x48.
-	//
-	// Note: Setting this value doesn't have an effect on OSX. You'll need to set the icon when
-	// bundling your application for release.
-	Icon []pixel.Picture
+// SetIcon is the option function for NewWindow to set the icon for a window.
+//
+// Icon specifies the icon images available to be used by the window. This is usually
+// displayed in the top bar of the window or in the task bar of the desktop environment.
+//
+// If passed one image, it will use that image, if passed an array of images those of or
+// closest to the sizes desired by the system are selected. The desired image sizes varies
+// depending on platform and system settings. The selected images will be rescaled as
+// needed. Good sizes include 16x16, 32x32 and 48x48.
+//
+// Note: Setting this value doesn't have an effect on OSX. You'll need to set the icon when
+// bundling your application for release.
+//
+// By default no icon is active and the value for icon will just be a nil slice.
+func SetIcon(icon []pixel.Picture) Option {
+	return func(o *options) {
+		o.icon = icon
+	}
+}
 
-	// Bounds specify the bounds of the Window in pixels.
-	Bounds pixel.Rect
+// SetMonitor is the option function for NewWindow to set the monitor of the progarm.
+//
+// By default monitor is nil which sets the window to windowed mode.
+// Using this function with any valid value for monitor other then nill will set the window
+// to fullscreen on that monitor
+func SetMonitor(monitor *Monitor) Option {
+	return func(o *options) {
+		o.monitor = monitor
+	}
+}
 
-	// If set to nil, the Window will be windowed. Otherwise it will be fullscreen on the
-	// specified Monitor.
-	Monitor *Monitor
+// Resizable is the option function for NewWindow to sets the window to be resizable.
+//
+// By default windows are not resizable and this needs to be given to NewWindow to set a window
+// to be resizable.
+func Resizable() Option {
+	return func(o *options) {
+		o.resizable = glfw.True
+	}
+}
 
-	// Whether the Window is resizable.
-	Resizable bool
+// Undecorated is the option function for NewWindow to set the window to be Undecorated.
+//
+// This means the window will not have things like window borders, close and minimize buttons, etc...
+// This can be used for things like windowed borderless.
+//
+// By default windows are decorated, meaning they have there borders and buttons.
+func Undecorated() Option {
+	return func(o *options) {
+		o.decorated = glfw.False
+	}
+}
 
-	// Undecorated Window ommits the borders and decorations (close button, etc.).
-	Undecorated bool
+// NoIconify is the option function for NewWindow to set the window to be noIconify.
+//
+// NoIconify specifies whether fullscreen windows should not automatically
+// iconify (and restore the previous video mode) on focus loss.
+//
+// By default this value is false.
+func NoIconify() Option {
+	return func(o *options) {
+		o.noIconify = glfw.True
+	}
+}
 
-	// NoIconify specifies whether fullscreen windows should not automatically
-	// iconify (and restore the previous video mode) on focus loss.
-	NoIconify bool
+// AlwaysOnTop is the option function for NewWindow to set the window to always be on top.
+//
+// By default this value is false.
+func AlwaysOnTop() Option {
+	return func(o *options) {
+		o.alwaysOnTop = true
+	}
+}
 
-	// AlwaysOnTop specifies whether the windowed mode window will be floating
-	// above other regular windows, also called topmost or always-on-top.
-	// This is intended primarily for debugging purposes and cannot be used to
-	// implement proper full screen windows.
-	AlwaysOnTop bool
+// VSyncEnabled is the option function for NewWindow to enable VSync.
+//
+// By default VSync is off so this needs to be used to enable it.
+func VSyncEnabled() Option {
+	return func(o *options) {
+		o.vsync = true
+	}
+}
 
-	// VSync (vertical synchronization) synchronizes Window's framerate with the framerate of
-	// the monitor.
-	VSync bool
+// TransparentWindowEnabled is the option function for NewWindow to enable transparent windows.
+//
+// This specificity sets the glfw WindowHint for TransparentFramebuffer to true which enables windows to handle Alpha for background colors.
+// This means you can have fully (or parshaly) transparent glfw windows if this is called.
+//
+// By default this value is false.
+func TransparentWindowEnabled() Option {
+	return func(o *options) {
+		o.transparentFramebuffer = glfw.True
+	}
 }
 
 // Window is a window handler. Use this type to manipulate a window (input, drawing, etc.).
@@ -76,7 +154,7 @@ type Window struct {
 		xpos, ypos, width, height int
 	}
 
-	prevInp, currInp, tempInp inputState
+	prevInp, currInp inputState
 
 	prevJoy, currJoy [JoystickLast + 1]joystickState
 }
@@ -86,13 +164,13 @@ var currWin *Window
 // NewWindow creates a new Window with it's properties specified in the provided config.
 //
 // If Window creation fails, an error is returned (e.g. due to unavailable graphics device).
-func NewWindow(cfg WindowConfig) (*Window, error) {
-	bool2int := map[bool]int{
-		true:  glfw.True,
-		false: glfw.False,
-	}
+func NewWindow(width, height int, options ...Option) (*Window, error) {
+	w := &Window{cursorVisible: true}
 
-	w := &Window{bounds: cfg.Bounds, cursorVisible: true}
+	o := defaultOptions
+	for _, fnc := range options {
+		fnc(&o)
+	}
 
 	err := mainthread.CallErr(func() error {
 		var err error
@@ -102,20 +180,20 @@ func NewWindow(cfg WindowConfig) (*Window, error) {
 		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 		glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
-		glfw.WindowHint(glfw.Resizable, bool2int[cfg.Resizable])
-		glfw.WindowHint(glfw.Decorated, bool2int[!cfg.Undecorated])
-		glfw.WindowHint(glfw.Floating, bool2int[cfg.AlwaysOnTop])
-		glfw.WindowHint(glfw.AutoIconify, bool2int[!cfg.NoIconify])
+		glfw.WindowHint(glfw.Resizable, o.resizable)
+		glfw.WindowHint(glfw.Decorated, o.decorated)
+		glfw.WindowHint(glfw.Floating, o.decorated)
+		glfw.WindowHint(glfw.AutoIconify, o.noIconify)
+		glfw.WindowHint(glfw.TransparentFramebuffer, o.transparentFramebuffer)
 
 		var share *glfw.Window
 		if currWin != nil {
 			share = currWin.window
 		}
-		_, _, width, height := intBounds(cfg.Bounds)
 		w.window, err = glfw.CreateWindow(
 			width,
 			height,
-			cfg.Title,
+			o.title,
 			nil,
 			share,
 		)
@@ -134,9 +212,9 @@ func NewWindow(cfg WindowConfig) (*Window, error) {
 		return nil, errors.Wrap(err, "creating window failed")
 	}
 
-	if len(cfg.Icon) > 0 {
-		imgs := make([]image.Image, len(cfg.Icon))
-		for i, icon := range cfg.Icon {
+	if len(o.icon) > 0 {
+		imgs := make([]image.Image, len(o.icon))
+		for i, icon := range o.icon {
 			pic := pixel.PictureDataFromPicture(icon)
 			imgs[i] = pic.Image()
 		}
@@ -145,12 +223,12 @@ func NewWindow(cfg WindowConfig) (*Window, error) {
 		})
 	}
 
-	w.SetVSync(cfg.VSync)
+	w.SetVSync(o.vsync)
 
 	w.initInput()
-	w.SetMonitor(cfg.Monitor)
+	w.SetMonitor(o.monitor)
 
-	w.canvas = NewCanvas(cfg.Bounds)
+	w.canvas = NewCanvas(pixel.R(0, 0, float64(width), float64(height)))
 	w.Update()
 
 	runtime.SetFinalizer(w, (*Window).Destroy)
